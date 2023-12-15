@@ -6,47 +6,48 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/prebid/prebid-cache/config"
 	"github.com/prebid/prebid-cache/utils"
-	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
 // RedisDB is an interface that helps us communicate with an instance of a
 // Redis database. Its implementation is intended to use the "github.com/go-redis/redis"
 // client
-type RedisDB interface {
+type RedisSentinelDB interface {
 	Get(ctx context.Context, key string) (string, error)
 	Put(ctx context.Context, key string, value string, ttlSeconds int) (bool, error)
 }
 
-// RedisDBClient is a wrapper for the Redis client that implements
+// RedisSentinelDBClient is a wrapper for the Redis client that implements
 // the RedisDB interface
-type RedisDBClient struct {
+type RedisSentinelDBClient struct {
 	client *redis.Client
 }
 
 // Get returns the value associated with the provided `key` parameter
-func (db RedisDBClient) Get(ctx context.Context, key string) (string, error) {
+func (db RedisSentinelDBClient) Get(ctx context.Context, key string) (string, error) {
 	return db.client.Get(ctx, key).Result()
 }
 
 // Put will set 'key' to hold string 'value' if 'key' does not exist in the redis storage.
 // When key already holds a value, no operation is performed. That's the reason this adapter
 // uses the 'github.com/go-redis/redis's library SetNX. SetNX is short for "SET if Not eXists".
-func (db RedisDBClient) Put(ctx context.Context, key, value string, ttlSeconds int) (bool, error) {
+func (db RedisSentinelDBClient) Put(ctx context.Context, key, value string, ttlSeconds int) (bool, error) {
 	return db.client.SetNX(ctx, key, value, time.Duration(ttlSeconds)*time.Second).Result()
 }
 
 // RedisBackend when initialized will instantiate and configure the Redis client. It implements
 // the Backend interface.
-type RedisBackend struct {
+type RedisSentinelBackend struct {
 	cfg    config.Redis
 	client RedisDB
 }
 
 // NewRedisBackend initializes the redis client and pings to make sure connection was successful
-func NewRedisBackend(cfg config.Redis, ctx context.Context) *RedisBackend {
+func NewRedisSentinelBackend(cfg config.Redis, ctx context.Context) *RedisSentinelBackend {
 	constr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
 
 	options := &redis.Options{
@@ -66,7 +67,7 @@ func NewRedisBackend(cfg config.Redis, ctx context.Context) *RedisBackend {
 		}
 	}
 
-	redisClient := RedisDBClient{client: redis.NewClient(options)}
+	redisClient := RedisSentinelDBClient{client: redis.NewClient(options)}
 
 	_, err := redisClient.client.Ping(ctx).Result()
 
@@ -77,7 +78,7 @@ func NewRedisBackend(cfg config.Redis, ctx context.Context) *RedisBackend {
 
 	log.Infof("Connected to Redis at %s:%d", cfg.Host, cfg.Port)
 
-	return &RedisBackend{
+	return &RedisSentinelBackend{
 		cfg:    cfg,
 		client: redisClient,
 	}
@@ -86,7 +87,7 @@ func NewRedisBackend(cfg config.Redis, ctx context.Context) *RedisBackend {
 // Get calls the Redis client to return the value associated with the provided `key`
 // parameter and interprets its response. A `Nil` error reply of the Redis client means
 // the `key` does not exist.
-func (b *RedisBackend) Get(ctx context.Context, key string) (string, error) {
+func (b *RedisSentinelBackend) Get(ctx context.Context, key string) (string, error) {
 	res, err := b.client.Get(ctx, key)
 
 	if err == redis.Nil {
@@ -99,7 +100,7 @@ func (b *RedisBackend) Get(ctx context.Context, key string) (string, error) {
 // Put writes the `value` under the provided `key` in the Redis storage server. Because the backend
 // implementation of Put calls SetNX(item *Item), a `false` return value is interpreted as the data
 // not being written because the `key` already holds a value, and a RecordExistsError is returned
-func (b *RedisBackend) Put(ctx context.Context, key string, value string, ttlSeconds int) error {
+func (b *RedisSentinelBackend) Put(ctx context.Context, key string, value string, ttlSeconds int) error {
 
 	success, err := b.client.Put(ctx, key, value, ttlSeconds)
 	if err != nil && err != redis.Nil {

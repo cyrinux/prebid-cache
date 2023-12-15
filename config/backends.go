@@ -8,12 +8,13 @@ import (
 )
 
 type Backend struct {
-	Type      BackendType `mapstructure:"type"`
-	Aerospike Aerospike   `mapstructure:"aerospike"`
-	Cassandra Cassandra   `mapstructure:"cassandra"`
-	Memcache  Memcache    `mapstructure:"memcache"`
-	Redis     Redis       `mapstructure:"redis"`
-	Ignite    Ignite      `mapstructure:"ignite"`
+	Type          BackendType   `mapstructure:"type"`
+	Aerospike     Aerospike     `mapstructure:"aerospike"`
+	Cassandra     Cassandra     `mapstructure:"cassandra"`
+	Memcache      Memcache      `mapstructure:"memcache"`
+	Redis         Redis         `mapstructure:"redis"`
+	RedisSentinel RedisSentinel `mapstructure:"redis_sentinel"`
+	Ignite        Ignite        `mapstructure:"ignite"`
 }
 
 func (cfg *Backend) validateAndLog() error {
@@ -28,6 +29,8 @@ func (cfg *Backend) validateAndLog() error {
 		return cfg.Memcache.validateAndLog()
 	case BackendRedis:
 		return cfg.Redis.validateAndLog()
+	case BackendRedisSentinel:
+		return cfg.RedisSentinel.validateAndLog()
 	case BackendIgnite:
 		return cfg.Ignite.validateAndLog()
 	case BackendMemory:
@@ -41,12 +44,13 @@ func (cfg *Backend) validateAndLog() error {
 type BackendType string
 
 const (
-	BackendAerospike BackendType = "aerospike"
-	BackendCassandra BackendType = "cassandra"
-	BackendMemcache  BackendType = "memcache"
-	BackendMemory    BackendType = "memory"
-	BackendRedis     BackendType = "redis"
-	BackendIgnite    BackendType = "ignite"
+	BackendAerospike     BackendType = "aerospike"
+	BackendCassandra     BackendType = "cassandra"
+	BackendMemcache      BackendType = "memcache"
+	BackendMemory        BackendType = "memory"
+	BackendRedis         BackendType = "redis"
+	BackendRedisSentinel BackendType = "redis_sentinel"
+	BackendIgnite        BackendType = "ignite"
 )
 
 type Aerospike struct {
@@ -159,6 +163,18 @@ type Redis struct {
 	TLS               RedisTLS `mapstructure:"tls"`
 }
 
+type RedisSentinel struct {
+	Hosts             []string `mapstructure:"hosts"`
+	MasterName        string   `mapstructure:"mastername"`
+	Username          string   `mapstructure:"username"`
+	Password          string   `mapstructure:"password"`
+	SentinelUsername  string   `mapstructure:"sentinel_username"`
+	SentinelPassword  string   `mapstructure:"sentinel_password"`
+	Db                int      `mapstructure:"db"`
+	ExpirationMinutes int      `mapstructure:"expiration"`
+	TLS               RedisTLS `mapstructure:"tls"`
+}
+
 type RedisTLS struct {
 	Enabled            bool `mapstructure:"enabled"`
 	InsecureSkipVerify bool `mapstructure:"insecure_skip_verify"`
@@ -173,6 +189,15 @@ func (cfg *Redis) validateAndLog() error {
 	}
 	log.Infof("config.backend.redis.tls.enabled: %t", cfg.TLS.Enabled)
 	log.Infof("config.backend.redis.tls.insecure_skip_verify: %t", cfg.TLS.InsecureSkipVerify)
+	return nil
+}
+
+func (cfg *RedisSentinel) validateAndLog() error {
+	log.Infof("config.backend.redis_sentinel.hosts: %s", cfg.Hosts)
+	log.Infof("config.backend.redis_sentinel.mastername: %s", cfg.MasterName)
+	log.Infof("config.backend.redis_sentinel.db: %d", cfg.Db)
+	log.Infof("config.backend.redis_sentinel.tls.enabled: %t", cfg.TLS.Enabled)
+	log.Infof("config.backend.redis_sentinel.tls.insecure_skip_verify: %t", cfg.TLS.InsecureSkipVerify)
 	return nil
 }
 

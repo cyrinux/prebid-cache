@@ -3,7 +3,7 @@ package backends
 import (
 	"context"
 	"crypto/tls"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -42,32 +42,30 @@ func (db RedisSentinelDBClient) Put(ctx context.Context, key, value string, ttlS
 // RedisBackend when initialized will instantiate and configure the Redis client. It implements
 // the Backend interface.
 type RedisSentinelBackend struct {
-	cfg    config.Redis
-	client RedisDB
+	cfg    config.RedisSentinel
+	client RedisSentinelDB
 }
 
 // NewRedisBackend initializes the redis client and pings to make sure connection was successful
-func NewRedisSentinelBackend(cfg config.Redis, ctx context.Context) *RedisSentinelBackend {
-	constr := cfg.Host + ":" + strconv.Itoa(cfg.Port)
+func NewRedisSentinelBackend(cfg config.RedisSentinel, ctx context.Context) *RedisSentinelBackend {
 
-	options := &redis.Options{
-		Addr:     constr,
-		Password: cfg.Password,
-		DB:       cfg.Db,
+	options := &redis.FailoverOptions{
+		SentinelAddrs:    cfg.Hosts,
+		Username:         cfg.Username,
+		Password:         cfg.Password,
+		MasterName:       cfg.MasterName,
+		SentinelUsername: cfg.SentinelUsername,
+		SentinelPassword: cfg.SentinelPassword,
+		DB:               cfg.Db,
 	}
 
 	if cfg.TLS.Enabled {
-		options = &redis.Options{
-			Addr:     constr,
-			Password: cfg.Password,
-			DB:       cfg.Db,
-			TLSConfig: &tls.Config{
-				InsecureSkipVerify: cfg.TLS.InsecureSkipVerify,
-			},
+		options.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.TLS.InsecureSkipVerify,
 		}
 	}
 
-	redisClient := RedisSentinelDBClient{client: redis.NewClient(options)}
+	redisClient := RedisSentinelDBClient{client: redis.NewFailoverClient(options)}
 
 	_, err := redisClient.client.Ping(ctx).Result()
 
@@ -76,7 +74,7 @@ func NewRedisSentinelBackend(cfg config.Redis, ctx context.Context) *RedisSentin
 		panic("RedisBackend failure. This shouldn't happen.")
 	}
 
-	log.Infof("Connected to Redis at %s:%d", cfg.Host, cfg.Port)
+	log.Infof("Connected to Redis at %s:%d", strings.Join(cfg.Hosts, ","))
 
 	return &RedisSentinelBackend{
 		cfg:    cfg,
